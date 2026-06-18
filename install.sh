@@ -12,6 +12,11 @@ REPO="illumination-k/entra-helper"
 BINARY="entra-helper"
 VERSION="${VERSION:-latest}"
 
+# Global temp dir, cleaned up on exit (trap runs after main returns, so this
+# must not be a function-local variable).
+tmp=""
+trap 'test -n "$tmp" && rm -rf "$tmp"' EXIT
+
 info() { printf '\033[32m==>\033[0m %s\n' "$*" >&2; }
 err() {
 	printf '\033[31merror:\033[0m %s\n' "$*" >&2
@@ -62,7 +67,7 @@ main() {
 	need curl
 	need tar
 
-	local os arch tag version archive base_url tmp
+	local os arch tag version archive base_url
 	os="$(detect_os)"
 	arch="$(detect_arch)"
 	tag="$(resolve_tag)"
@@ -71,7 +76,6 @@ main() {
 	base_url="https://github.com/${REPO}/releases/download/${tag}"
 
 	tmp="$(mktemp -d)"
-	trap 'rm -rf "$tmp"' EXIT
 
 	info "Downloading ${archive} (${tag})"
 	curl -fsSL -o "${tmp}/${archive}" "${base_url}/${archive}" ||
@@ -93,20 +97,33 @@ main() {
 	[ -f "${tmp}/${BINARY}" ] || err "binary ${BINARY} not found in archive"
 	chmod +x "${tmp}/${BINARY}"
 
-	# Choose an install directory, preferring a writable one without sudo.
-	local dir="${INSTALL_DIR:-/usr/local/bin}"
-	if [ ! -d "$dir" ] || [ ! -w "$dir" ]; then
-		if [ -z "${INSTALL_DIR:-}" ] && command -v sudo >/dev/null 2>&1 && [ -d "$dir" ]; then
-			info "Installing to ${dir} (requires sudo)"
-			sudo install -m 0755 "${tmp}/${BINARY}" "${dir}/${BINARY}"
-			info "Installed ${BINARY} ${tag} -> ${dir}/${BINARY}"
-			return
-		fi
-		dir="${HOME}/.local/bin"
-		mkdir -p "$dir"
+	# If INSTALL_DIR is set explicitly, honor it (create if missing).
+	if [ -n "${INSTALL_DIR:-}" ]; then
+		mkdir -p "$INSTALL_DIR" || err "cannot create INSTALL_DIR: $INSTALL_DIR"
+		install -m 0755 "${tmp}/${BINARY}" "${INSTALL_DIR}/${BINARY}" ||
+			err "cannot write to INSTALL_DIR: $INSTALL_DIR"
+		finish "$INSTALL_DIR" "$tag"
+		return
 	fi
 
-	install -m 0755 "${tmp}/${BINARY}" "${dir}/${BINARY}"
+	# Otherwise prefer /usr/local/bin (sudo if needed), falling back to ~/.local/bin.
+	local dir="/usr/local/bin"
+	if [ -d "$dir" ] && [ -w "$dir" ]; then
+		install -m 0755 "${tmp}/${BINARY}" "${dir}/${BINARY}"
+	elif [ -d "$dir" ] && command -v sudo >/dev/null 2>&1; then
+		info "Installing to ${dir} (requires sudo)"
+		sudo install -m 0755 "${tmp}/${BINARY}" "${dir}/${BINARY}"
+	else
+		dir="${HOME}/.local/bin"
+		mkdir -p "$dir"
+		install -m 0755 "${tmp}/${BINARY}" "${dir}/${BINARY}"
+	fi
+	finish "$dir" "$tag"
+}
+
+# Report the install location and warn if it is not on PATH.
+finish() {
+	local dir="$1" tag="$2"
 	info "Installed ${BINARY} ${tag} -> ${dir}/${BINARY}"
 	case ":${PATH}:" in
 	*":${dir}:"*) ;;
