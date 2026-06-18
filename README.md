@@ -16,7 +16,25 @@ It supports three credential flows and persists tokens between runs so you only 
   authentication record is stored on disk, so subsequent runs refresh silently without prompting.
 - Token goes to **stdout**, prompts/diagnostics go to **stderr** — safe to use in pipelines.
 
-## Requirements
+## Install
+
+Download the latest release binary for your OS/arch (verifies the checksum):
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/illumination-k/entra-helper/main/install.sh | bash
+```
+
+Pin a version or change the destination via env vars:
+
+```bash
+VERSION=v0.1.0 INSTALL_DIR="$HOME/.local/bin" \
+  bash -c "$(curl -fsSL https://raw.githubusercontent.com/illumination-k/entra-helper/main/install.sh)"
+```
+
+Or grab an archive from the [Releases page](https://github.com/illumination-k/entra-helper/releases),
+or build from source (see [Build](#build)).
+
+## Requirements (build from source)
 
 Toolchain is managed by [mise](https://mise.jdx.dev/). The Go-specific tools live in
 `mise.golang.toml`, which is only active when `MISE_ENV` includes `golang`.
