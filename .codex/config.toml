@@ -1,0 +1,3 @@
+[features]
+# Ensure Codex lifecycle hooks are enabled for this repository.
+codex_hooks = true
