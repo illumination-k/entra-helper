@@ -59,6 +59,11 @@ if ! check_command mise; then
 	exit 1
 fi
 
+# The fmt:* / lint:* tasks live in the env-scoped config files (mise.base.toml,
+# mise.golang.toml), which mise only loads when the matching MISE_ENV is set —
+# CI sets it per workflow. Load every env here so the aggregator globs resolve.
+export MISE_ENV="${MISE_ENV:-base,golang}"
+
 # Skip fmt/lint when the working tree is clean — pure Q&A turns (no file
 # edits) shouldn't pay the cost of running the full check suite.
 if check_command git && git rev-parse --is-inside-work-tree >/dev/null 2>&1; then

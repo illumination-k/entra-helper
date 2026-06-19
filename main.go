@@ -97,6 +97,7 @@ func runAuth(parent context.Context, kind string, opts *options) error {
 	var (
 		tokenCache azidentity.Cache
 		record     azidentity.AuthenticationRecord
+		haveRecord bool
 	)
 	if persist {
 		c, err := cache.New(nil)
@@ -104,8 +105,9 @@ func runAuth(parent context.Context, kind string, opts *options) error {
 			return fmt.Errorf("opening token cache: %w", err)
 		}
 		tokenCache = c
-		if rec, err := loadRecord(opts.record); err == nil {
+		if rec, err := loadRecord(opts.record); err == nil && rec != (azidentity.AuthenticationRecord{}) {
 			record = rec
+			haveRecord = true
 		}
 	}
 
@@ -114,26 +116,48 @@ func runAuth(parent context.Context, kind string, opts *options) error {
 		return err
 	}
 
-	// For cacheable flows, authenticate explicitly so the AuthenticationRecord
-	// can be persisted; subsequent runs then reuse the cache silently.
-	if a, ok := cred.(authenticator); ok && persist {
-		rec, authErr := a.Authenticate(ctx, &policy.TokenRequestOptions{Scopes: scopes})
-		if authErr != nil {
-			return fmt.Errorf("authenticating: %w", authErr)
-		}
-		if saveErr := saveRecord(opts.record, rec); saveErr != nil {
-			fmt.Fprintln(os.Stderr, "warning: could not persist auth record:", saveErr)
+	// Only trigger the interactive prompt when we have no cached
+	// AuthenticationRecord yet. Once one is persisted, subsequent runs reuse
+	// the cache and GetToken refreshes the token silently.
+	if a, ok := cred.(authenticator); ok && persist && !haveRecord {
+		if err = authenticateAndSave(ctx, a, opts.record, scopes); err != nil {
+			return err
 		}
 	}
 
 	tok, err := cred.GetToken(ctx, policy.TokenRequestOptions{Scopes: scopes})
 	if err != nil {
-		return fmt.Errorf("acquiring token: %w", err)
+		// A persisted record exists but the silent refresh failed (e.g. the
+		// refresh token expired or was revoked). Fall back to a fresh
+		// interactive authentication once before giving up.
+		if a, ok := cred.(authenticator); ok && persist && haveRecord {
+			if authErr := authenticateAndSave(ctx, a, opts.record, scopes); authErr != nil {
+				return authErr
+			}
+			tok, err = cred.GetToken(ctx, policy.TokenRequestOptions{Scopes: scopes})
+		}
+		if err != nil {
+			return fmt.Errorf("acquiring token: %w", err)
+		}
 	}
 
 	fmt.Println(tok.Token)
 	if opts.expiresOn {
 		fmt.Fprintln(os.Stderr, "expires-on:", tok.ExpiresOn.Format(time.RFC3339))
+	}
+	return nil
+}
+
+// authenticateAndSave runs the credential's interactive authentication and
+// persists the resulting AuthenticationRecord so later runs can refresh
+// silently.
+func authenticateAndSave(ctx context.Context, a authenticator, recordPath string, scopes []string) error {
+	rec, err := a.Authenticate(ctx, &policy.TokenRequestOptions{Scopes: scopes})
+	if err != nil {
+		return fmt.Errorf("authenticating: %w", err)
+	}
+	if err := saveRecord(recordPath, rec); err != nil {
+		fmt.Fprintln(os.Stderr, "warning: could not persist auth record:", err)
 	}
 	return nil
 }
