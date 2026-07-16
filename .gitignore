@@ -12,6 +12,10 @@ Thumbs.db
 # mise
 .mise.local.toml
 
+# Nix
+/result
+/result-*
+
 # Go
 *.exe
 *.exe~

@@ -1,0 +1,35 @@
+name: CI Nix
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    paths:
+      - "flake.nix"
+      - "flake.lock"
+      - "go.mod"
+      - "go.sum"
+      - "**.go"
+      - ".github/workflows/ci_nix.yml"
+
+jobs:
+  build:
+    strategy:
+      matrix:
+        os: [ubuntu-latest, macos-latest]
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 30
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+        with:
+          persist-credentials: false
+
+      - uses: cachix/install-nix-action@630ae543ea3a38a9a4166f03376c02c50f408342 # v31.11.0
+
+      - name: Build
+        run: nix build --print-build-logs
+
+      - name: Smoke test
+        run: ./result/bin/entra-helper --version

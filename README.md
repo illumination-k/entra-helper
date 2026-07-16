@@ -34,6 +34,24 @@ VERSION=v0.1.0 INSTALL_DIR="$HOME/.local/bin" \
 Or grab an archive from the [Releases page](https://github.com/illumination-k/entra-helper/releases),
 or build from source (see [Build](#build)).
 
+### Nix
+
+The repository is a flake, so you can run it directly:
+
+```bash
+nix run github:illumination-k/entra-helper -- devicecode \
+  --scope https://graph.microsoft.com/.default
+```
+
+Or install it into your profile:
+
+```bash
+nix profile install github:illumination-k/entra-helper
+```
+
+To use it in another flake, add this repo as an input and pull in
+`packages.${system}.entra-helper` (or apply `overlays.default`).
+
 ## Requirements (build from source)
 
 Toolchain is managed by [mise](https://mise.jdx.dev/). The Go-specific tools live in
@@ -44,10 +62,19 @@ export MISE_ENV=base,golang   # or set it in your shell / direnv
 mise install                  # installs Go, golangci-lint, govulncheck, ...
 ```
 
+Alternatively, if you use Nix, `nix develop` drops you into a shell with the same tools
+(Go, golangci-lint, govulncheck, goreleaser, dprint).
+
 ## Build
 
 ```bash
 go build -o entra-helper .
+```
+
+Or with Nix (the binary lands in `./result/bin/entra-helper`):
+
+```bash
+nix build
 ```
 
 ## Usage
